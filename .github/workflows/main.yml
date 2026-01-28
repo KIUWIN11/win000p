@@ -1,4 +1,4 @@
-name: 🖥️ RDP • Windows 11 • NGROK • FIXED
+name: 🖥️ RDP • Windows 11 • Cloudflare
 
 on:
   workflow_dispatch:
@@ -27,16 +27,14 @@ jobs:
           Add-LocalGroupMember "Remote Desktop Users" $u
         }
 
-    - name: 🌐 Install ngrok
+    - name: 🌐 Download cloudflared
       run: |
-        Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
-        tar -xf ngrok.zip
+        Invoke-WebRequest https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe -OutFile cloudflared.exe
 
-    - name: 🔑 Setup ngrok token
+    - name: 🚀 Start RDP Tunnel
       run: |
-        .\ngrok.exe config add-authtoken "${{ secrets.NGROK_AUTH_TOKEN }}"
-
-    - name: 🚀 Run ngrok TCP
-      run: |
-        Write-Host "Starting ngrok..."
-        .\ngrok.exe tcp 3389 --log=stdout
+        Write-Host "========== RDP INFO =========="
+        Write-Host "USER : WIN"
+        Write-Host "PASS : Rdp@13579!Zx"
+        Write-Host "=============================="
+        .\cloudflared.exe tunnel --url tcp://localhost:3389
