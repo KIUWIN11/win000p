@@ -1,4 +1,4 @@
-name: 🖥️ RDP • Windows 11 • Cloudflare
+name: 🖥️ RDP • Windows • Clean & Simple
 
 on:
   workflow_dispatch:
@@ -9,32 +9,80 @@ jobs:
     timeout-minutes: 3600
 
     steps:
-    - name: 🔐 Enable RDP
+    # ==========================================================
+    # 🔐 ENABLE RDP
+    # ==========================================================
+    - name: 🔐 Enable RDP & Firewall
       run: |
-        Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' fDenyTSConnections 0
+        Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
+          -Name "fDenyTSConnections" -Value 0 -Force
+
+        netsh advfirewall firewall delete rule name="RDP-3389" 2>$null
+        netsh advfirewall firewall add rule name="RDP-3389" `
+          dir=in action=allow protocol=TCP localport=3389
+
         Restart-Service TermService -Force
 
-    - name: 👤 Create User
+    # ==========================================================
+    # 👤 USER: WIN (FIXED PASSWORD)
+    # ==========================================================
+    - name: 👤 Create RDP User
       run: |
-        $u="WIN"
-        $p="Rdp@13579!Zx"
-        $s=ConvertTo-SecureString $p -AsPlainText -Force
-        if(Get-LocalUser $u -ErrorAction SilentlyContinue){
-          Set-LocalUser $u -Password $s
+        $User = "WIN"
+        $Pass = "Win@123"
+        $Secure = ConvertTo-SecureString $Pass -AsPlainText -Force
+
+        if (Get-LocalUser -Name $User -ErrorAction SilentlyContinue) {
+          Set-LocalUser -Name $User -Password $Secure
         } else {
-          New-LocalUser $u -Password $s
-          Add-LocalGroupMember Administrators $u
-          Add-LocalGroupMember "Remote Desktop Users" $u
+          New-LocalUser -Name $User -Password $Secure -AccountNeverExpires
+          Add-LocalGroupMember Administrators $User
+          Add-LocalGroupMember "Remote Desktop Users" $User
         }
 
-    - name: 🌐 Download cloudflared
-      run: |
-        Invoke-WebRequest https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe -OutFile cloudflared.exe
+        echo "RDP_USER=$User" >> $env:GITHUB_ENV
+        echo "RDP_PASS=$Pass" >> $env:GITHUB_ENV
 
-    - name: 🚀 Start RDP Tunnel
+    # ==========================================================
+    # 🧼 REMOVE SERVER / EVALUATION WATERMARK (SUPPORTED WAY)
+    # ==========================================================
+    - name: 🧼 Clean Desktop Watermark
       run: |
-        Write-Host "========== RDP INFO =========="
-        Write-Host "USER : WIN"
-        Write-Host "PASS : Rdp@13579!Zx"
-        Write-Host "=============================="
-        .\cloudflared.exe tunnel --url tcp://localhost:3389
+        reg add "HKCU\Control Panel\Desktop" `
+          /v "PaintDesktopVersion" /t REG_DWORD /d 0 /f
+
+    # ==========================================================
+    # 🌐 INSTALL & CONNECT TAILSCALE
+    # ==========================================================
+    - name: 🌐 Install Tailscale
+      run: |
+        Invoke-WebRequest https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi `
+          -OutFile $env:TEMP\tailscale.msi
+        Start-Process msiexec.exe `
+          -ArgumentList "/i", "`"$env:TEMP\tailscale.msi`"", "/quiet", "/norestart" `
+          -Wait
+
+    - name: 🔗 Connect Tailscale
+      run: |
+        & "$env:ProgramFiles\Tailscale\tailscale.exe" up `
+          --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} `
+          --hostname=gh-rdp-$env:GITHUB_RUN_ID
+
+        $ip = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+        echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
+
+    # ==========================================================
+    # 🟢 READY + KEEP ALIVE
+    # ==========================================================
+    - name: 🟢 RDP READY
+      run: |
+        Write-Host "=================================="
+        Write-Host "🖥️  RDP IS READY"
+        Write-Host "🌐 ADDRESS : $env:TAILSCALE_IP"
+        Write-Host "👤 USER    : WIN"
+        Write-Host "🔑 PASS    : Win@123"
+        Write-Host "=================================="
+
+        while ($true) {
+          Start-Sleep -Seconds 300
+        }
