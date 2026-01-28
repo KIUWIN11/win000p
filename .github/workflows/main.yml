@@ -1,0 +1,70 @@
+name: 🖥️ RDP • Windows 11 • NGROK • ONE-FILE
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rdp:
+    runs-on: windows-latest
+    timeout-minutes: 3600
+
+    steps:
+    # ===============================
+    # ENABLE RDP
+    # ===============================
+    - name: 🔐 Enable RDP
+      run: |
+        Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' fDenyTSConnections 0
+        Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' UserAuthentication 0
+        netsh advfirewall firewall add rule name="RDP-3389" dir=in action=allow protocol=TCP localport=3389
+        Restart-Service TermService -Force
+
+    # ===============================
+    # CREATE USER (STABLE)
+    # ===============================
+    - name: 👤 Create RDP User
+      run: |
+        $u = "WIN"
+        $p = "Rdp@13579!Zx"
+        $s = ConvertTo-SecureString $p -AsPlainText -Force
+
+        if (Get-LocalUser -Name $u -ErrorAction SilentlyContinue) {
+          Set-LocalUser -Name $u -Password $s
+        } else {
+          New-LocalUser -Name $u -Password $s -AccountNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member $u
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $u
+        }
+
+    # ===============================
+    # INSTALL NGROK
+    # ===============================
+    - name: 🌐 Install ngrok
+      run: |
+        Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
+        tar -xf ngrok.zip
+        .\ngrok.exe config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+
+    # ===============================
+    # START TCP TUNNEL
+    # ===============================
+    - name: 🚀 Start ngrok TCP 3389
+      run: |
+        Start-Process -NoNewWindow -FilePath ".\ngrok.exe" -ArgumentList "tcp 3389"
+        Start-Sleep 10
+        $t = Invoke-RestMethod http://127.0.0.1:4040/api/tunnels
+        $addr = $t.tunnels[0].public_url
+        echo "NGROK_ADDR=$addr" >> $env:GITHUB_ENV
+
+    # ===============================
+    # SHOW INFO + KEEP ALIVE
+    # ===============================
+    - name: 🟢 SHOW LOGIN INFO
+      run: |
+        Write-Host "================================"
+        Write-Host "NGROK ADDR : $env:NGROK_ADDR"
+        Write-Host "PORT       : (đã nằm trong addr)"
+        Write-Host "USERNAME   : WIN"
+        Write-Host "PASSWORD   : Rdp@13579!Zx"
+        Write-Host "================================"
+        while ($true) { Start-Sleep 300 }
